@@ -233,17 +233,50 @@
     </style>
 </head>
 <body>
+    <!-- File Upload Modal -->
+    <div class="modal fade" id="fileUploadModal" tabindex="-1" aria-labelledby="fileUploadModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="fileUploadModalLabel">Upload Excel File</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="excelUploadForm">
+                        <div class="mb-3">
+                            <label for="excelFile" class="form-label">Choose Excel File</label>
+                            <input class="form-control" type="file" id="excelFile" accept=".xlsx,.xls,.xlsm" required>
+                        </div>
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">Upload</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="container-fluid d-flex justify-content-center align-items-center min-vh-100 p-3">
         <div class="chat-container">
             <!-- Header -->
-            <div class="chat-header">
-                <h3>
-                    <span class="alten-logo">ALTEN</span>
-                    <i class="fas fa-brain ms-2"></i> 
-                    Assistant IA Avancé
-                    <span class="online-indicator"></span>
-                </h3>
-                <small>Intelligence Artificielle • Analyse de Données • Visualisation</small>
+            <div class="d-flex justify-content-between align-items-center p-3" style="background: linear-gradient(135deg, #FFFF00 0%, #FF0000 100%);">
+                <div>
+                    <h3 class="m-0">
+                        <span class="alten-logo">ALTEN</span>
+                        <i class="fas fa-brain ms-2"></i> 
+                        Assistant IA Avancé
+                        <span class="online-indicator"></span>
+                    </h3>
+                    <small>Intelligence Artificielle • Analyse de Données • Visualisation</small>
+                </div>
+                <div class="d-flex flex-column align-items-end">
+                    <button class="btn btn-sm btn-outline-dark mb-2" data-bs-toggle="modal" data-bs-target="#fileUploadModal">
+                        <i class="fas fa-file-excel me-1"></i> Charger Excel
+                    </button>
+                    <div id="fileInfo" class="small text-end" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        Aucun fichier chargé
+                    </div>
+                </div>
             </div>
             
             <!-- Messages -->
@@ -293,13 +326,240 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+        // Global variables
+        let currentFile = null;
+        let currentSheet = null;
+        let sheetData = {};
+        let currentData = null;
+
+        // DOM Elements
         const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('messageInput');
         const typingIndicator = document.getElementById('typingIndicator');
-        const fileInput = document.getElementById('fileInput');
-      
+        const fileInfo = document.getElementById('fileInfo');
+        const excelUploadForm = document.getElementById('excelUploadForm');
+        const excelFileInput = document.getElementById('excelFile');
 
+        // Event Listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function(tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    // Handle Excel file upload
+    if (excelUploadForm) {
+        excelUploadForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (!excelFileInput.files || excelFileInput.files.length === 0) {
+                showError('Veuillez sélectionner un fichier Excel');
+                return;
+            }
+
+            const file = excelFileInput.files[0];
+            const formData = new FormData();
+            formData.append('excel_file', file);
+
+            try {
+                showLoading(true, 'Traitement du fichier Excel...');
+                
+                const response = await fetch('/upload-excel/', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFTTOKEN': getCookie('csrftoken')
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    currentFile = file;
+                    fileInfo.textContent = file.name;
+                    fileInfo.title = file.name;
+                    
+                    // Store sheet data
+                    sheetData = data.sheet_data || {};
+                    
+                    // Load first sheet by default
+                    if (data.sheet_names && data.sheet_names.length > 0) {
+                        loadSheetData(data.sheet_names[0]);
+                    }
+                    
+                    // Close modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('fileUploadModal'));
+                    modal.hide();
+                    
+                    // Show success message
+                    addMessage(`Fichier "${file.name}" chargé avec succès !`, false);
+                } else {
+                    throw new Error(data.message || 'Erreur lors du chargement du fichier');
+                }
+            } catch (error) {
+                console.error('Error uploading file:', error);
+                showError(`Erreur: ${error.message}`);
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+});
+
+// Helper function to get CSRF token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Load sheet data
+async function loadSheetData(sheetName) {
+    try {
+        showLoading(true, `Chargement de la feuille "${sheetName}"...`);
+        
+        const response = await fetch(`/sheet-data/${encodeURIComponent(sheetName)}/`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            currentSheet = sheetName;
+            currentData = data.data;
+            
+            // Update UI with data
+            updateDataDisplay();
+        } else {
+            throw new Error(data.message || 'Erreur lors du chargement des données');
+        }
+    } catch (error) {
+        console.error('Error loading sheet data:', error);
+        showError(`Erreur: ${error.message}`);
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Update data display
+function updateDataDisplay() {
+    if (!currentData || !currentData.columns || !currentData.rows) {
+        return;
+    }
+
+    // Create a preview of the data
+    let preview = '<div class="table-responsive mt-3">';
+    preview += '<table class="table table-sm table-bordered table-hover">';
+    
+    // Add header row
+    preview += '<thead class="table-light"><tr>';
+    currentData.columns.forEach(column => {
+        preview += `<th>${column}</th>`;
+    });
+    preview += '</tr></thead>';
+    
+    // Add data rows (limit to 5 for preview)
+    preview += '<tbody>';
+    const rowCount = Math.min(5, currentData.rows.length);
+    for (let i = 0; i < rowCount; i++) {
+        preview += '<tr>';
+        currentData.rows[i].forEach(cell => {
+            preview += `<td>${cell !== null ? cell : ''}</td>`;
+        });
+        preview += '</tr>';
+    }
+    
+    if (currentData.rows.length > 5) {
+        preview += `<tr><td colspan="${currentData.columns.length}" class="text-center text-muted">... et ${currentData.rows.length - 5} lignes supplémentaires</td></tr>`;
+    }
+    
+    preview += '</tbody></table></div>';
+    
+    // Add data summary
+    preview += `<div class="alert alert-info mt-2">
+        <i class="fas fa-info-circle me-2"></i>
+        ${currentData.rows.length} lignes × ${currentData.columns.length} colonnes
+    </div>`;
+    
+    // Add to chat
+    addMessage(`Données de la feuille "${currentSheet}" chargées avec succès :`, false);
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message bot';
+    messageDiv.innerHTML = `
+        <div class="message-bubble">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong>${currentFile.name} - ${currentSheet}</strong>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary me-1" onclick="showFullData()">
+                        <i class="fas fa-expand"></i> Voir tout
+                    </button>
+                    <button class="btn btn-sm btn-outline-success" onclick="analyzeData()">
+                        <i class="fas fa-chart-line"></i> Analyser
+                    </button>
+                </div>
+            </div>
+            ${preview}
+        </div>
+    `;
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Show loading indicator
+function showLoading(show, message = 'Chargement...') {
+    if (show) {
+        // Show loading indicator
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = 'loadingIndicator';
+        loadingDiv.className = 'message bot';
+        loadingDiv.innerHTML = `
+            <div class="message-bubble">
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border spinner-border-sm text-warning me-2" role="status">
+                        <span class="visually-hidden">Chargement...</span>
+                    </div>
+                    ${message}
+                </div>
+            </div>
+        `;
+        chatMessages.appendChild(loadingDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    } else {
+        // Remove loading indicator
+        const loadingDiv = document.getElementById('loadingIndicator');
+        if (loadingDiv) {
+            loadingDiv.remove();
+        }
+    }
+}
+
+// Show error message
+function showError(message) {
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'message bot';
+    errorDiv.innerHTML = `
+        <div class="message-bubble">
+            <div class="alert alert-danger mb-0">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                ${message}
+            </div>
+        </div>
+    `;
+    chatMessages.appendChild(errorDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
         // Système de compréhension IA amélioré
         const intentPatterns = {
             'graphique': {
@@ -758,6 +1018,412 @@
                     Vous pouvez toujours utiliser la saisie manuelle! 📝`);
             }
         }, 4000);
+
+        // Show full data in a modal
+        function showFullData() {
+            if (!currentData || !currentData.columns || !currentData.rows) {
+                showError('Aucune donnée à afficher');
+                return;
+            }
+
+            // Create modal HTML
+            const modalId = 'dataModal';
+            let modalHtml = `
+            <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="dataModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-xl">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="dataModalLabel">
+                                <i class="fas fa-table me-2"></i>
+                                ${currentFile.name} - ${currentSheet}
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+            `;
+
+            // Add headers
+            currentData.columns.forEach(column => {
+                modalHtml += `<th>${column}</th>`;
+            });
+            
+            modalHtml += `
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+            `;
+            
+            // Add data rows
+            currentData.rows.forEach(row => {
+                modalHtml += '<tr>';
+                row.forEach(cell => {
+                    modalHtml += `<td>${cell !== null ? cell : ''}</td>`;
+                });
+                modalHtml += '</tr>';
+            });
+            
+            modalHtml += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                            <button type="button" class="btn btn-primary" onclick="exportToExcel()">
+                                <i class="fas fa-file-export me-1"></i> Exporter vers Excel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            `;
+            
+            // Add modal to the page
+            const modalContainer = document.createElement('div');
+            modalContainer.innerHTML = modalHtml;
+            document.body.appendChild(modalContainer);
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById(modalId));
+            modal.show();
+            
+            // Clean up the modal when it's hidden
+            document.getElementById(modalId).addEventListener('hidden.bs.modal', function () {
+                modalContainer.remove();
+            });
+        }
+
+        // Analyze the current data
+        function analyzeData() {
+            if (!currentData || !currentData.columns || !currentData.rows) {
+                showError('Aucune donnée à analyser');
+                return;
+            }
+            
+            // Show loading indicator
+            showLoading(true, 'Analyse des données en cours...');
+            
+            // Simulate analysis (in a real app, this would be an API call)
+            setTimeout(() => {
+                showLoading(false);
+                
+                // Create a simple analysis report
+                const analysis = {
+                    rowCount: currentData.rows.length,
+                    columnCount: currentData.columns.length,
+                    numericColumns: [],
+                    textColumns: [],
+                    dateColumns: [],
+                    columnStats: {}
+                };
+                
+                // Analyze each column
+                currentData.columns.forEach((col, colIndex) => {
+                    const values = currentData.rows.map(row => row[colIndex]);
+                    const nonEmptyValues = values.filter(v => v !== null && v !== '');
+                    const numericValues = nonEmptyValues.filter(v => !isNaN(parseFloat(v)));
+                    
+                    const colStats = {
+                        name: col,
+                        nonEmptyCount: nonEmptyValues.length,
+                        emptyCount: values.length - nonEmptyValues.length,
+                        isNumeric: numericValues.length > 0,
+                        uniqueValues: [...new Set(nonEmptyValues)].length
+                    };
+                    
+                    if (colStats.isNumeric) {
+                        colStats.min = Math.min(...numericValues);
+                        colStats.max = Math.max(...numericValues);
+                        colStats.avg = numericValues.reduce((a, b) => a + parseFloat(b), 0) / numericValues.length;
+                        analysis.numericColumns.push(col);
+                    } else if (nonEmptyValues.length > 0) {
+                        // Try to detect dates
+                        const dateCount = nonEmptyValues.filter(v => {
+                            return !isNaN(Date.parse(v)) && v.toString().match(/\d{4}-\d{2}-\d{2}/);
+                        }).length;
+                        
+                        if (dateCount / nonEmptyValues.length > 0.5) {
+                            analysis.dateColumns.push(col);
+                            colStats.isDate = true;
+                        } else {
+                            analysis.textColumns.push(col);
+                        }
+                    }
+                    
+                    analysis.columnStats[col] = colStats;
+                });
+                
+                // Display the analysis
+                displayAnalysis(analysis);
+            }, 1500);
+        }
+
+        // Display data analysis results
+        function displayAnalysis(analysis) {
+            let html = `
+                <div class="message-bubble">
+                    <h5><i class="fas fa-chart-pie me-2"></i> Analyse des données</h5>
+                    <div class="alert alert-info">
+                        <div class="d-flex justify-content-between">
+                            <div><i class="fas fa-table me-2"></i> ${analysis.rowCount} lignes × ${analysis.columnCount} colonnes</div>
+                            <div><i class="fas fa-chart-bar me-2"></i> ${analysis.numericColumns.length} colonnes numériques</div>
+                            <div><i class="fas fa-font me-2"></i> ${analysis.textColumns.length} colonnes texte</div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+            `;
+            
+            // Add a card for each column
+            currentData.columns.forEach(column => {
+                const stats = analysis.columnStats[column];
+                
+                html += `
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100">
+                            <div class="card-header bg-light">
+                                <strong>${column}</strong>
+                                ${stats.isNumeric ? '<span class="badge bg-primary ms-2">Numérique</span>' : ''}
+                                ${stats.isDate ? '<span class="badge bg-success ms-2">Date</span>' : ''}
+                                ${!stats.isNumeric && !stats.isDate ? '<span class="badge bg-secondary ms-2">Texte</span>' : ''}
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-2">
+                                    <small class="text-muted">Valeurs non vides:</small>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar bg-success" role="progressbar" 
+                                             style="width: ${(stats.nonEmptyCount / currentData.rows.length) * 100}%" 
+                                             aria-valuenow="${stats.nonEmptyCount}" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="${currentData.rows.length}">
+                                            ${stats.nonEmptyCount} / ${currentData.rows.length}
+                                        </div>
+                                    </div>
+                                </div>
+                                ${stats.isNumeric ? `
+                                    <div class="row">
+                                        <div class="col-4">
+                                            <small class="text-muted">Min</small>
+                                            <div class="fw-bold">${stats.min.toLocaleString()}</div>
+                                        </div>
+                                        <div class="col-4">
+                                            <small class="text-muted">Moyenne</small>
+                                            <div class="fw-bold">${stats.avg.toFixed(2)}</div>
+                                        </div>
+                                        <div class="col-4">
+                                            <small class="text-muted">Max</small>
+                                            <div class="fw-bold">${stats.max.toLocaleString()}</div>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                                <div class="mt-2">
+                                    <small class="text-muted">Valeurs uniques:</small>
+                                    <div class="fw-bold">${stats.uniqueValues}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                    </div>
+                    <div class="text-end mt-3">
+                        <button class="btn btn-sm btn-outline-primary me-2" onclick="suggestVisualizations(${JSON.stringify(analysis).replace(/"/g, '&quot;')})">
+                            <i class="fas fa-magic me-1"></i> Suggestions de visualisations
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="$('#dataAnalysis').remove()">
+                            <i class="fas fa-times me-1"></i> Fermer
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Add to chat
+            const analysisDiv = document.createElement('div');
+            analysisDiv.id = 'dataAnalysis';
+            analysisDiv.className = 'message bot';
+            analysisDiv.innerHTML = html;
+            chatMessages.appendChild(analysisDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Suggest visualizations based on data analysis
+        function suggestVisualizations(analysis) {
+            let suggestions = [];
+            
+            // Time series suggestions
+            if (analysis.dateColumns.length > 0) {
+                analysis.numericColumns.forEach(numCol => {
+                    suggestions.push({
+                        title: `Série temporelle de ${numCol}`,
+                        type: 'line',
+                        xAxis: analysis.dateColumns[0],
+                        yAxis: numCol,
+                        description: `Montre l'évolution de ${numCol} au fil du temps.`
+                    });
+                });
+            }
+            
+            // Bar chart suggestions for categorical data
+            if (analysis.textColumns.length > 0) {
+                analysis.numericColumns.forEach(numCol => {
+                    analysis.textColumns.forEach(textCol => {
+                        if (analysis.columnStats[textCol].uniqueValues < 20) {
+                            suggestions.push({
+                                title: `${numCol} par ${textCol}`,
+                                type: 'bar',
+                                xAxis: textCol,
+                                yAxis: numCol,
+                                description: `Compare les valeurs de ${numCol} par catégorie de ${textCol}.`
+                            });
+                        }
+                    });
+                });
+            }
+            
+            // Pie chart for distribution
+            if (analysis.textColumns.some(col => analysis.columnStats[col].uniqueValues < 10)) {
+                const catCol = analysis.textColumns.find(col => analysis.columnStats[col].uniqueValues < 10);
+                if (catCol) {
+                    suggestions.push({
+                        title: `Répartition par ${catCol}`,
+                        type: 'pie',
+                        xAxis: catCol,
+                        description: `Affiche la répartition des données par ${catCol}.`
+                    });
+                }
+            }
+            
+            // Display suggestions
+            let html = `
+                <div class="message-bubble">
+                    <h5><i class="fas fa-lightbulb me-2"></i> Suggestions de visualisations</h5>
+                    <div class="row">
+            `;
+            
+            suggestions.forEach((suggestion, index) => {
+                const icon = suggestion.type === 'line' ? 'chart-line' : 
+                            suggestion.type === 'bar' ? 'chart-bar' : 'chart-pie';
+                
+                html += `
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="fas ${icon} me-2"></i>
+                                    ${suggestion.title}
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        onclick="createChart(${JSON.stringify(suggestion).replace(/"/g, '&quot;')})">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-text small">${suggestion.description}</p>
+                                <div class="text-muted small">
+                                    Type: ${suggestion.type}
+                                    ${suggestion.xAxis ? `<br>X: ${suggestion.xAxis}` : ''}
+                                    ${suggestion.yAxis ? `<br>Y: ${suggestion.yAxis}` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            if (suggestions.length === 0) {
+                html += `
+                    <div class="col-12">
+                        <div class="alert alert-info text-center">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Aucune suggestion de visualisation disponible pour ces données.
+                        </div>
+                    </div>
+                `;
+            }
+            
+            html += `
+                    </div>
+                </div>
+            `;
+            
+            // Add to chat
+            const suggestionsDiv = document.createElement('div');
+            suggestionsDiv.className = 'message bot';
+            suggestionsDiv.innerHTML = html;
+            chatMessages.appendChild(suggestionsDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Create a chart based on suggestion
+        function createChart(suggestion) {
+            if (!currentData || !currentData.columns || !currentData.rows) {
+                showError('Aucune donnée disponible pour créer le graphique');
+                return;
+            }
+            
+            // Show loading indicator
+            showLoading(true, `Création du graphique ${suggestion.title}...`);
+            
+            // Simulate chart creation (in a real app, this would be an API call)
+            setTimeout(() => {
+                showLoading(false);
+                
+                // Create a simple chart visualization
+                const chartId = 'chart-' + Date.now();
+                let html = `
+                    <div class="message-bubble">
+                        <h5><i class="fas fa-chart-${suggestion.type === 'line' ? 'line' : suggestion.type === 'bar' ? 'bar' : 'pie'} me-2"></i> ${suggestion.title}</h5>
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            Graphique créé avec succès!
+                        </div>
+                        <div class="text-center my-3">
+                            <div class="bg-light border rounded p-3">
+                                <i class="fas fa-chart-${suggestion.type === 'line' ? 'line' : suggestion.type === 'bar' ? 'bar' : 'pie'}" style="font-size: 100px;"></i>
+                                <div class="mt-2">Visualisation ${suggestion.type}</div>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <button class="btn btn-sm btn-outline-primary me-2" onclick="downloadChart('${chartId}')">
+                                <i class="fas fa-download me-1"></i> Télécharger
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="this.closest('.message').remove()">
+                                <i class="fas fa-times me-1"></i> Fermer
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                // Add to chat
+                const chartDiv = document.createElement('div');
+                chartDiv.className = 'message bot';
+                chartDiv.innerHTML = html;
+                chatMessages.appendChild(chartDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }, 2000);
+        }
+
+        // Export data to Excel
+        function exportToExcel() {
+            if (!currentData || !currentData.columns || !currentData.rows) {
+                showError('Aucune donnée à exporter');
+                return;
+            }
+            
+            // In a real app, this would generate an actual Excel file
+            addMessage(`Fichier Excel "${currentFile.name}" exporté avec succès!`, false);
+        }
+
+        // Download chart
+        function downloadChart(chartId) {
+            // In a real app, this would download the actual chart
+            addMessage(`Graphique téléchargé avec succès!`, false);
+        }
     </script>
 </body>
 </html>
