@@ -486,27 +486,47 @@
             messageInput.value = '';
             showTyping();
 
-            // Appel à l’API Django/LangChain
+            // Appel de la fonction de l'analyse des requêtes 
             fetch('/Alten/Chatbot/analyze/', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                 body: 'text=' + encodeURIComponent(message)
             })
             .then(response => response.json())
-            .then(data => {
-                hideTyping();
-                if (data.result) {
-                    addMessage(`<strong>ChatBot Alten :</strong><br>${data.result}`);
-                } else if (data.error) {
-                    addMessage(`❌ Erreur d'analyse :<br><span style='color:red'>${data.error}</span> recharger la page svp`);
-                } else {
-                    addMessage("❌ Erreur d'analyse inconnue. rechargez la page svp");
-                }
-            })
-            .catch(() => {
-                hideTyping();
-                addMessage("❌ Erreur de connexion au serveur.");
-            });
+           .then(data => {
+    hideTyping();
+
+    // ✅ Vérifier si le résultat doit être affiché dans un tableau
+    if (data.is_table) {
+        let tableHTML = "<table class='table table-bordered table-striped mt-2'>";
+        tableHTML += "<thead><tr>";
+
+        // Générer l'entête
+        data.columns.forEach(col => tableHTML += `<th>${col}</th>`);
+        tableHTML += "</tr></thead><tbody>";
+
+        // Générer les lignes
+        data.result.forEach(row => {
+            tableHTML += "<tr>";
+            Object.values(row).forEach(val => tableHTML += `<td>${val}</td>`);
+            tableHTML += "</tr>";
+        });
+
+        tableHTML += "</tbody></table>";
+
+        // ✅ Ajouter le tableau comme message bot
+        addMessage(`<strong>ChatBot Alten :</strong><br>${tableHTML}`);
+    } 
+    else if (data.result) {
+        addMessage(`<strong>ChatBot Alten :</strong><br>${data.result}`);
+    } 
+    else if (data.error) {
+        addMessage(`❌ Erreur d'analyse :<br><span style='color:red'>${data.error}</span> recharger la page svp`);
+    } 
+    else {
+        addMessage("❌ Erreur d'analyse inconnue. rechargez la page svp");
+    }
+})
         }
 
         function sendMessage(text) {
