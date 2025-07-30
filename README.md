@@ -116,6 +116,36 @@ Pour des raisons de sécurité, il est recommandé de déplacer les informations
 - Suivi des transferts entre experts
 - Évaluation de la satisfaction
 - Historique des conversations
+- Génération de graphiques et statistiques sur les demandes (via commandes du chatbot ou API)
+
+## 🛡️ Gestion et administration des données
+
+- **Toutes les données (demandes, applications, responsables, etc.) peuvent être ajoutées, modifiées ou supprimées via l'interface Django admin** :
+  - Accédez à l'administration à l'adresse : http://127.0.0.1:8000/admin/
+  - Connectez-vous avec votre superutilisateur
+  - Tous les modèles sont disponibles pour une gestion complète
+
+## 📈 Visualisation et statistiques
+
+- Les graphiques ne sont plus affichés en permanence dans l'interface principale.
+- Pour obtenir des statistiques ou des graphiques, utilisez les commandes du chatbot (ex : "Montre-moi les demandes par catégorie") ou accédez aux endpoints API (voir `views.py`).
+- Les résultats s'affichent dans le chat ou peuvent être intégrés dans d'autres interfaces selon vos besoins.
+
+## 🛠️ Dépannage courant
+
+- **Aucune donnée dans les graphiques/statistiques ?**
+  - Vérifiez que vous avez bien ajouté des "Demandes" et autres objets via l'admin.
+  - Rafraîchissez la page après modification des données.
+
+- **Impossible d'accéder à l'admin ?**
+  - Utilisez : http://127.0.0.1:8000/admin/
+  - Si besoin, créez un superutilisateur :
+    ```bash
+    python manage.py createsuperuser
+    ```
+
+- **Problème d'affichage ou bug ?**
+  - Vérifiez la console du navigateur et les logs du serveur Django pour plus d'informations.
 
 ## 📝 Notes supplémentaires
 
