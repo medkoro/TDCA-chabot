@@ -357,4 +357,20 @@ def chatbot_suggestions(request):
         "Combien de demandes ont été refusées ?"
     ]
     
-    return JsonResponse({"suggestions": suggestions})
+@csrf_exempt
+def demandes_per_categorie_chart(request):
+    if request.method == "GET":
+        from .models import Demande
+        from django.db.models import Count
+        data = (
+            Demande.objects.values('categorie')
+            .annotate(count=Count('categorie'))
+            .order_by('categorie')
+        )
+        labels = [item['categorie'] for item in data]
+        values = [item['count'] for item in data]
+        return JsonResponse({
+            'labels': labels,
+            'values': values
+        })
+    return JsonResponse({'error': 'Méthode non autorisée.'}, status=405)

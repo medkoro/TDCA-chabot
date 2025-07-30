@@ -245,7 +245,8 @@
                 </h3>
                 <small>Intelligence Artificielle • Analyse de Données • Visualisation</small>
             </div>
-            
+
+
             <!-- Messages -->
             <div class="chat-messages" id="chatMessages">
                 <div class="message bot">
@@ -293,6 +294,48 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Chart.js - Simple Demandes per Categorie Chart
+        fetch('/Alten/Chatbot/chart/demandes-per-categorie/')
+            .then(response => response.json())
+            .then(data => {
+                const chartDiv = document.querySelector('.chart-preview');
+                if (!data.labels || !data.values || data.labels.length === 0 || data.values.length === 0) {
+                    chartDiv.innerHTML += '<div class="text-warning">Aucune donnée à afficher pour le graphique.</div>';
+                    return;
+                }
+                const ctx = document.getElementById('demandesChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: 'Nombre de demandes',
+                            data: data.values,
+                            backgroundColor: 'rgba(255, 193, 7, 0.6)',
+                            borderColor: 'rgba(255, 193, 7, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false },
+                            title: { display: false }
+                        },
+                        scales: {
+                            y: { beginAtZero: true }
+                        }
+                    }
+                });
+            })
+            .catch(() => {
+                const chartDiv = document.querySelector('.chart-preview');
+                chartDiv.innerHTML += '<div class="text-danger">Erreur lors du chargement des données du graphique.</div>';
+            });
+    </script>
+
     <script>
         const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('messageInput');

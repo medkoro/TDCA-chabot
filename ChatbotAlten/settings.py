@@ -78,14 +78,13 @@ WSGI_APPLICATION = 'ChatbotAlten.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'chatbotalten',
+        'NAME': 'postgres',
         'USER': 'postgres',
-        'PASSWORD': 'moha.2003.',
+        'PASSWORD': 'kuro',
         'HOST': 'localhost',
-        'PORT': '5432',
+        'PORT': '5431',
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
